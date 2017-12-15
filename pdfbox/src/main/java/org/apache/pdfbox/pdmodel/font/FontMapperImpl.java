@@ -45,6 +45,7 @@ final class FontMapperImpl implements FontMapper
     private static final FontCache fontCache = new FontCache(); // todo: static cache isn't ideal
     private FontProvider fontProvider;
     private Map<String, FontInfo> fontInfoByName;
+    private Map<String, FontInfo> fontInfoByRealName;
     private final TrueTypeFont lastResortFont;
 
     /** Map of PostScript name substitutes, in priority order. */
@@ -136,6 +137,7 @@ final class FontMapperImpl implements FontMapper
     public synchronized void setProvider(FontProvider fontProvider)
     {
         fontInfoByName = createFontInfoByName(fontProvider.getFontInfo());
+        fontInfoByRealName = createFontInfoByRealName(fontProvider.getFontInfo());
         this.fontProvider = fontProvider;
     }
 
@@ -169,6 +171,17 @@ final class FontMapperImpl implements FontMapper
             {
                 map.put(name, info);
             }
+        }
+        return map;
+    }
+
+    private Map<String, FontInfo> createFontInfoByRealName(List<? extends FontInfo> fontInfoList)
+    {
+        Map<String, FontInfo> map = new LinkedHashMap<String, FontInfo>();
+        for (FontInfo info : fontInfoList)
+        {
+          map.put(info.getRealName(), info);
+          map.put(info.getRealName().toLowerCase(), info);
         }
         return map;
     }
@@ -309,6 +322,68 @@ final class FontMapperImpl implements FontMapper
         return fontName;
     }
 
+    private FontBoxFont findFontByRealName (FontFormat format, String realName)
+    {
+        // make sure the font provider is initialized
+        if (fontProvider == null)
+        {
+            getProvider();
+        }
+    	
+      FontInfo info = fontInfoByRealName.get(realName);
+      if (info != null && info.getFormat() == format)
+      {
+          return info.getFont();
+      }
+      return null;
+    	
+    }
+    /**
+     * Finds a TrueType font with the given PostScript name, or a suitable substitute, or null.
+     *
+     * @param fontDescriptor FontDescriptor
+     */
+    @Override
+    public FontMapping<TrueTypeFont> getTrueTypeFontOfFamily(String fontFamily,
+                                                            PDFontDescriptor fontDescriptor)
+    {
+        final String BOLD = " bold";
+        final String ITALIC = " italic";
+        
+
+    	if (fontDescriptor == null) {
+	        TrueTypeFont ttf = (TrueTypeFont)findFontByRealName(FontFormat.TTF, fontFamily);
+	        if (ttf != null)
+	        {
+	            return new FontMapping<TrueTypeFont>(ttf, false);
+	        }
+	        // no fontDescriptor nor TTF found 
+	        return new FontMapping<TrueTypeFont>(lastResortFont, true);
+    	}
+        else  // find font respecting fontDescriptor with priority
+        {
+        	String fontName = fontFamily.toLowerCase();
+        	if (fontDescriptor.isForceBold()) {
+        	  fontName 	+= BOLD;
+        	}
+        	if (fontDescriptor.isItalic()) {
+          	  fontName 	+= ITALIC;
+          	}
+        	TrueTypeFont ttf = (TrueTypeFont)findFontByRealName(FontFormat.TTF, fontName);
+            if (ttf == null)            	
+            {
+            	// first fallback to baseFont
+            	ttf =  (TrueTypeFont)findFontByRealName(FontFormat.TTF, fontFamily);
+            }
+            if (ttf == null)
+            {
+                // we have to return something here as TTFs aren't strictly required on the system
+                ttf = lastResortFont;
+            }
+            return new FontMapping<TrueTypeFont>(ttf, true);
+        }
+    }
+    
     /**
      * Finds a TrueType font with the given PostScript name, or a suitable substitute, or null.
      *

@@ -45,6 +45,8 @@ public class NamingTable extends TTFTable
     private String fontSubFamily = null;
     private String psName = null;
 
+	private String fontDispName;
+
     NamingTable(TrueTypeFont font)
     {
         super(font);
@@ -164,6 +166,7 @@ public class NamingTable extends TTFTable
             psName = psName.trim();
         }
 
+        fontDispName = getEnglishName(NameRecord.NAME_FULL_FONT_NAME);
         initialized = true;
     }
 
@@ -278,5 +281,9 @@ public class NamingTable extends TTFTable
     public String getPostScriptName()
     {
         return psName;
+    }
+    
+    public String getDisplayName() {
+    	return fontDispName;
     }
 }

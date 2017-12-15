@@ -72,8 +72,9 @@ final class FileSystemFontProvider extends FontProvider
         private final PDPanoseClassification panose;
         private final File file;
         private transient FileSystemFontProvider parent;
+		private final String realName;
 
-        private FSFontInfo(File file, FontFormat format, String postScriptName,
+        private FSFontInfo(File file, FontFormat format, String postScriptName, String englishName,
                            CIDSystemInfo cidSystemInfo, int usWeightClass, int sFamilyClass,
                            int ulCodePageRange1, int ulCodePageRange2, int macStyle, byte[] panose,
                            FileSystemFontProvider parent)
@@ -81,6 +82,7 @@ final class FileSystemFontProvider extends FontProvider
             this.file = file;
             this.format = format;
             this.postScriptName = postScriptName;
+            this.realName = englishName;
             this.cidSystemInfo = cidSystemInfo;
             this.usWeightClass = usWeightClass;
             this.sFamilyClass = sFamilyClass;
@@ -97,6 +99,15 @@ final class FileSystemFontProvider extends FontProvider
             return postScriptName;
         }
 
+        @Override
+        public String getRealName()
+        {
+        	if ((realName == null) || (realName.trim().isEmpty())) {
+        		return postScriptName;
+        	}
+            return realName;
+        }
+        
         @Override
         public FontFormat getFormat()
         {
@@ -189,9 +200,9 @@ final class FileSystemFontProvider extends FontProvider
      */
     private static final class FSIgnored extends FSFontInfo
     {
-        private FSIgnored(File file, FontFormat format, String postScriptName)
+        private FSIgnored(File file, FontFormat format, String postScriptName, String englishName)
         {
-            super(file, format, postScriptName, null, 0, 0, 0, 0, 0, null, null);
+            super(file, format, postScriptName,englishName, null, 0, 0, 0, 0, 0, null, null);
         }
     }
 
@@ -309,6 +320,8 @@ final class FileSystemFontProvider extends FontProvider
                 writer.write("|");
                 writer.write(fontInfo.format.toString());
                 writer.write("|");
+                writer.write(fontInfo.realName.trim());
+                writer.write("|");
                 if (fontInfo.cidSystemInfo != null)
                 {
                     writer.write(fontInfo.cidSystemInfo.getRegistry() + '-' +
@@ -395,7 +408,7 @@ final class FileSystemFontProvider extends FontProvider
                 String line;
                 while ((line = reader.readLine()) != null)
                 {
-                    String[] parts = line.split("\\|", 10);
+                    String[] parts = line.split("\\|", 11);
                     if (parts.length < 10)
                     {
                         LOG.error("Incorrect line '" + line + "' in font disk cache is skipped");
@@ -403,6 +416,7 @@ final class FileSystemFontProvider extends FontProvider
                     }
 
                     String postScriptName;
+                    String englishName ="";
                     FontFormat format;
                     CIDSystemInfo cidSystemInfo = null;
                     int usWeightClass = -1;
@@ -416,37 +430,41 @@ final class FileSystemFontProvider extends FontProvider
                     postScriptName = parts[0];
                     format = FontFormat.valueOf(parts[1]);
                     if (parts[2].length() > 0)
-                    {
-                        String[] ros = parts[2].split("-");
-                        cidSystemInfo = new CIDSystemInfo(ros[0], ros[1], Integer.parseInt(ros[2]));
+                    {   
+                    	englishName = parts[2];
                     }
                     if (parts[3].length() > 0)
                     {
-                        usWeightClass = (int)Long.parseLong(parts[3], 16);
+                        String[] ros = parts[3].split("-");
+                        cidSystemInfo = new CIDSystemInfo(ros[0], ros[1], Integer.parseInt(ros[2]));
                     }
                     if (parts[4].length() > 0)
                     {
-                        sFamilyClass = (int)Long.parseLong(parts[4], 16);
+                        usWeightClass = (int)Long.parseLong(parts[4], 16);
                     }
-                    ulCodePageRange1 = (int)Long.parseLong(parts[5], 16);
-                    ulCodePageRange2 = (int)Long.parseLong(parts[6], 16);
-                    if (parts[7].length() > 0)
+                    if (parts[5].length() > 0)
                     {
-                        macStyle = (int)Long.parseLong(parts[7], 16);
+                        sFamilyClass = (int)Long.parseLong(parts[5], 16);
                     }
+                    ulCodePageRange1 = (int)Long.parseLong(parts[6], 16);
+                    ulCodePageRange2 = (int)Long.parseLong(parts[7], 16);
                     if (parts[8].length() > 0)
+                    {
+                        macStyle = (int)Long.parseLong(parts[8], 16);
+                    }
+                    if (parts[9].length() > 0)
                     {
                         panose = new byte[10];
                         for (int i = 0; i < 10; i ++)
                         {
-                            String str = parts[8].substring(i * 2, i * 2 + 2);
+                            String str = parts[9].substring(i * 2, i * 2 + 2);
                             int b = Integer.parseInt(str, 16);
                             panose[i] = (byte)(b & 0xff);
                         }
                     }
-                    fontFile = new File(parts[9]);
+                    fontFile = new File(parts[10]);
                     
-                    FSFontInfo info = new FSFontInfo(fontFile, format, postScriptName,
+                    FSFontInfo info = new FSFontInfo(fontFile, format, postScriptName, englishName,
                             cidSystemInfo, usWeightClass, sFamilyClass, ulCodePageRange1,
                             ulCodePageRange2, macStyle, panose, this);
                     results.add(info);
@@ -549,7 +567,7 @@ final class FileSystemFontProvider extends FontProvider
             // read PostScript name, if any
             if (ttf.getName() != null && ttf.getName().contains("|"))
             {
-                fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skippipeinname*"));
+                fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skippipeinname*",""));
                 LOG.warn("Skipping font with '|' in name " + ttf.getName() + " in file " + file);
             }
             else if (ttf.getName() != null)
@@ -557,7 +575,7 @@ final class FileSystemFontProvider extends FontProvider
                 // ignore bitmap fonts
                 if (ttf.getHeader() == null)
                 {
-                    fontInfoList.add(new FSIgnored(file, FontFormat.TTF, ttf.getName()));
+                    fontInfoList.add(new FSIgnored(file, FontFormat.TTF, ttf.getName(),""));
                     return;
                 }
                 int macStyle = ttf.getHeader().getMacStyle();
@@ -591,7 +609,11 @@ final class FileSystemFontProvider extends FontProvider
                         int supplement = cidFont.getSupplement();
                         ros = new CIDSystemInfo(registry, ordering, supplement);
                     }
-                    fontInfoList.add(new FSFontInfo(file, FontFormat.OTF, ttf.getName(), ros,
+                    String displayName = "";
+                    if (ttf.getNaming() != null) {
+                    	displayName = ttf.getNaming().getDisplayName(); 
+                    }
+                    fontInfoList.add(new FSFontInfo(file, FontFormat.OTF, ttf.getName(),displayName, ros,
                             usWeightClass, sFamilyClass, ulCodePageRange1, ulCodePageRange2,
                             macStyle, panose, this));
                 }
@@ -611,7 +633,12 @@ final class FileSystemFontProvider extends FontProvider
                     }
                     
                     format = "TTF";
-                    fontInfoList.add(new FSFontInfo(file, FontFormat.TTF, ttf.getName(), ros,
+                    String displayName = "";
+                    if (ttf.getNaming() != null) {
+                    	displayName = ttf.getNaming().getDisplayName(); 
+                    }
+
+                    fontInfoList.add(new FSFontInfo(file, FontFormat.TTF, ttf.getName(), displayName ,ros,
                             usWeightClass, sFamilyClass, ulCodePageRange1, ulCodePageRange2,
                             macStyle, panose, this));
                 }
@@ -629,13 +656,13 @@ final class FileSystemFontProvider extends FontProvider
             }
             else
             {
-                fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skipnoname*"));
+                fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skipnoname*",""));
                 LOG.warn("Missing 'name' entry for PostScript name in font " + file);
             }
         }
         catch (IOException e)
         {
-            fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skipexception*"));
+            fontInfoList.add(new FSIgnored(file, FontFormat.TTF, "*skipexception*",""));
             LOG.error("Could not load font file: " + file, e);
         }
         finally
@@ -655,11 +682,11 @@ final class FileSystemFontProvider extends FontProvider
             Type1Font type1 = Type1Font.createWithPFB(input);
             if (type1.getName() != null && type1.getName().contains("|"))
             {
-                fontInfoList.add(new FSIgnored(pfbFile, FontFormat.PFB, "*skippipeinname*"));
+                fontInfoList.add(new FSIgnored(pfbFile, FontFormat.PFB, "*skippipeinname*",""));
                 LOG.warn("Skipping font with '|' in name " + type1.getName() + " in file " + pfbFile);
                 return;
             }
-            fontInfoList.add(new FSFontInfo(pfbFile, FontFormat.PFB, type1.getName(),
+            fontInfoList.add(new FSFontInfo(pfbFile, FontFormat.PFB, type1.getName(),type1.getFullName(),
                                             null, -1, -1, 0, 0, -1, null, this));
 
             if (LOG.isTraceEnabled())

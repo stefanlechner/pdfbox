@@ -32,6 +32,11 @@ public abstract class FontInfo
     public abstract String getPostScriptName();
 
     /**
+     * Returns the Display name of the font.
+     */
+    public abstract String getRealName();
+    
+    /**
      * Returns the font's format.
      */
     public abstract FontFormat getFormat();
